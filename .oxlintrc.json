@@ -1,0 +1,22 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oxc-project/oxc/main/npm/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "import", "react", "unicorn"],
+  "env": {
+    "browser": true,
+    "node": true
+  },
+  "rules": {
+    "recommended": "error",
+    "no-debugger": "error",
+    "no-console": "warn",
+    "sort-imports": "off"
+  },
+  "overrides": [
+    {
+      "files": ["*.test.ts", "*.spec.ts"],
+      "rules": {
+        "no-unused-expressions": "off"
+      }
+    }
+  ]
+}
