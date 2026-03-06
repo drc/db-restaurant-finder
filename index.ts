@@ -35,6 +35,7 @@ const CLEANING_CONFIG = {
     /^UNLOCKED:\s*/i,
     /^Crock-Dough-Burn-Pho-Est:\s*/i,
     /^Munch Madness X:\s*/i,
+    /^Munch Madness XI:\s*/i,
     /^Toront-dough:\s*/i,
     /^Munch Madness:\s*/i,
     /^Episode 200 -\s*/i,
@@ -92,16 +93,45 @@ app.get('/api/episodes', async (c) => {
     };
   });
   return c.json(cleanedEpisodes);
-  // return c.json(
-  //   episodes.map((episode: any) => ({
-  //     title: episode.title,
-  //     // description: episode.description,
-  //     type: episode['itunes:episodeType'],
-  //     number: episode['itunes:episode'],
-  //     restaurant: episode.title,
-  //     pubDate: episode.pubDate,
-  //   }))
-  // );
+});
+
+app.get('/api/nearby', async (c) => {
+  const { lat, lng, restaurants } = c.req.query();
+
+  if (!lat || !lng) {
+    return c.json({ error: 'Missing lat or lng query parameters' }, 400);
+  }
+
+  if (!process.env.GOOGLE_API_KEY) {
+    return c.json({ error: 'Missing Authentication Token' }, 500);
+  }
+
+  const apiKey = process.env.GOOGLE_API_KEY;
+
+  const textSearchResponse = await fetch(
+    'https://places.googleapis.com/v1/places:searchText',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': apiKey,
+        'X-Goog-FieldMask':
+          'places.displayName,places.formattedAddress,places.location',
+      },
+      body: JSON.stringify({
+        textQuery: restaurants,
+        pageSize: 3,
+        locationBias: {
+          circle: {
+            center: { latitude: parseFloat(lat), longitude: parseFloat(lng) },
+            radius: 50000.0,
+          },
+        },
+      }),
+    }
+  );
+  const textSearchData = await textSearchResponse.json();
+  return c.json(textSearchData.places || []);
 });
 
 function cleanRestaurantName(name: string): string[] {

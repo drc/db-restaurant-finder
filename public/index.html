@@ -250,6 +250,44 @@
       margin-bottom: 15px;
     }
 
+    .location-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-top: 10px;
+    }
+
+    .location-item {
+      background: #0f3460;
+      border-radius: 8px;
+      padding: 12px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .location-item:first-child {
+      border: 1px solid #f5a623;
+    }
+
+    .location-address {
+      flex: 1;
+      font-size: 0.9rem;
+      color: #ccc;
+      line-height: 1.4;
+    }
+
+    .location-distance {
+      background: #1a1a2e;
+      color: #f5a623;
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 12px;
+      white-space: nowrap;
+    }
+
     .distance-badge {
       display: inline-block;
       background: #f5a623;
@@ -465,12 +503,40 @@
       }).addTo(map);
     }
 
-    // Find closest restaurant for an episode
-    function findClosestForEpisode(episode, userLat, userLng) {
+    // Find closest restaurant for an episode using the /api/nearby endpoint
+    async function findClosestForEpisode(episode, userLat, userLng) {
       if (!episode.restaurants || episode.restaurants.length === 0) {
         return null;
       }
 
+      try {
+        const response = await fetch(`/api/nearby?lat=${userLat}&lng=${userLng}&restaurants=${encodeURIComponent(episode.restaurants.join(','))}`);
+        const data = await response.json();
+
+        if (Array.isArray(data) && data.length > 0) {
+          const locations = data.map((place) => {
+            const lat = place.location.latitude;
+            const lng = place.location.longitude;
+            const distance = getDistance(userLat, userLng, lat, lng);
+
+            return {
+              name: place.displayName?.text || episode.restaurants[0],
+              lat,
+              lng,
+              address: place.formattedAddress,
+              distance
+            };
+          });
+
+          // Sort by distance and return all locations
+          locations.sort((a, b) => a.distance - b.distance);
+          return locations;
+        }
+      } catch (err) {
+        console.error('Error fetching nearby restaurants:', err);
+      }
+
+      // Fallback to local mock data if API fails
       let closest = null;
       let closestDistance = Infinity;
 
@@ -499,7 +565,8 @@
         };
       }
 
-      return closest;
+      // Return as array for consistency
+      return closest ? [closest] : null;
     }
 
     // Render episode list
@@ -518,7 +585,7 @@
           .join('');
 
         item.innerHTML = `
-          <span class="episode-number ${episode.type === 'bonus' ? 'bonus' : ''}">${episode.number || 'Bonus'}</span>
+          <span class="episode-number ${episode.type.toLowerCase() === 'bonus' ? 'bonus' : episode.number == null ? 'bonus' : ''}">${episode.number || 'Bonus'}</span>
           <div class="episode-content">
             <div class="episode-item-title">${episode.title}</div>
             <div class="episode-item-meta">${formatDate(episode.pubDate)}</div>
@@ -571,20 +638,29 @@
       initMap(userLocation);
 
       // Find closest restaurant
-      const restaurant = findClosestForEpisode(episode, userLocation.lat, userLocation.lng);
+      const restaurants = await findClosestForEpisode(episode, userLocation.lat, userLocation.lng);
 
       document.getElementById('restaurantLoading').style.display = 'none';
 
-      if (!restaurant) {
+      if (!restaurants || restaurants.length === 0) {
         document.getElementById('noRestaurant').style.display = 'block';
         return;
       }
 
-      // Show restaurant info
+      // Show restaurant info for the closest one
+      const closest = restaurants[0];
       document.getElementById('restaurantInfo').classList.add('visible');
-      document.getElementById('distance').textContent = `${restaurant.distance.toFixed(1)} miles away`;
-      document.getElementById('restaurantName').textContent = restaurant.name;
-      document.getElementById('restaurantMeta').textContent = restaurant.address || 'Location approximate';
+      document.getElementById('distance').textContent = `${closest.distance.toFixed(1)} miles away`;
+      document.getElementById('restaurantName').textContent = closest.name;
+      
+      // Show all addresses as styled list
+      const addressList = restaurants.map((r) => `
+        <div class="location-item">
+          <span class="location-address">${r.address || 'Location approximate'}</span>
+          <span class="location-distance">${r.distance.toFixed(1)} mi</span>
+        </div>
+      `).join('');
+      document.getElementById('restaurantMeta').innerHTML = `<div class="location-list">${addressList}</div>`;
 
       // Add markers
       const userIcon = L.divIcon({
@@ -605,23 +681,30 @@
         .addTo(map)
         .bindPopup('You are here');
 
-      L.marker([restaurant.lat, restaurant.lng], { icon: restaurantIcon })
-        .addTo(map)
-        .bindPopup(`<strong>${restaurant.name}</strong><br>${restaurant.address || ''}`)
-        .openPopup();
+      // Add markers for all restaurant locations
+      const allCoords = [[userLocation.lat, userLocation.lng]];
+      restaurants.forEach((restaurant, index) => {
+        const marker = L.marker([restaurant.lat, restaurant.lng], { icon: restaurantIcon })
+          .addTo(map)
+          .bindPopup(`<strong>${restaurant.name}</strong><br>${restaurant.address || ''}<br><em>${restaurant.distance.toFixed(1)} miles</em>`);
+        
+        // Open popup for the closest one
+        if (index === 0) {
+          marker.openPopup();
+        }
 
-      // Draw line
-      L.polyline([[userLocation.lat, userLocation.lng], [restaurant.lat, restaurant.lng]], {
-        color: '#f5a623',
-        weight: 2,
-        dashArray: '5, 10'
-      }).addTo(map);
+        allCoords.push([restaurant.lat, restaurant.lng]);
 
-      // Fit bounds
-      const bounds = L.latLngBounds([
-        [userLocation.lat, userLocation.lng],
-        [restaurant.lat, restaurant.lng]
-      ]);
+        // Draw line to each restaurant
+        L.polyline([[userLocation.lat, userLocation.lng], [restaurant.lat, restaurant.lng]], {
+          color: index === 0 ? '#f5a623' : '#888',
+          weight: index === 0 ? 2 : 1,
+          dashArray: '5, 10'
+        }).addTo(map);
+      });
+
+      // Fit bounds to include all markers
+      const bounds = L.latLngBounds(allCoords);
       map.fitBounds(bounds, { padding: [50, 50] });
     }
 
