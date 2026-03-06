@@ -120,7 +120,7 @@ app.get('/api/nearby', async (c) => {
       },
       body: JSON.stringify({
         textQuery: restaurants,
-        pageSize: 3,
+        pageSize: 10,
         locationBias: {
           circle: {
             center: { latitude: parseFloat(lat), longitude: parseFloat(lng) },
@@ -131,7 +131,16 @@ app.get('/api/nearby', async (c) => {
     }
   );
   const textSearchData = await textSearchResponse.json();
-  return c.json(textSearchData.places || []);
+  console.log(textSearchData.places.map((place: any) => place.displayName.text));
+  const restaurantLocations =
+    textSearchData.places?.filter((place: any) => {
+      const placeName = place.displayName.text.toLowerCase();
+      return restaurants
+        .toLowerCase()
+        .split(',')
+        .some((res: string) => placeName.includes(res.trim()));
+    }) || [];
+  return c.json(restaurantLocations);
 });
 
 function cleanRestaurantName(name: string): string[] {

@@ -510,7 +510,9 @@
       }
 
       try {
-        const response = await fetch(`/api/nearby?lat=${userLat}&lng=${userLng}&restaurants=${encodeURIComponent(episode.restaurants.join(','))}`);
+        const response = await fetch(`/api/nearby?lat=${userLat}&lng=${userLng}&restaurants=${encodeURIComponent(episode.restaurants.join(','))}`, {
+          headers: { 'Cache-Control': 'max-age=10800' }
+        });
         const data = await response.json();
 
         if (Array.isArray(data) && data.length > 0) {
@@ -551,21 +553,7 @@
         }
       }
 
-      // If no known location, generate mock coords
-      if (!closest && episode.restaurants.length > 0) {
-        const name = episode.restaurants[0];
-        const lat = userLat + (Math.random() - 0.5) * 0.08;
-        const lng = userLng + (Math.random() - 0.5) * 0.08;
-        closest = {
-          name: name,
-          lat,
-          lng,
-          address: "Location approximate",
-          distance: getDistance(userLat, userLng, lat, lng)
-        };
-      }
-
-      // Return as array for consistency
+      // Return as array for consistency, or null if no locations found
       return closest ? [closest] : null;
     }
 
