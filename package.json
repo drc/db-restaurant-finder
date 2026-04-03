@@ -23,6 +23,7 @@
     "vite": "^6.0.0"
   },
   "dependencies": {
+    "@sentry/sveltekit": "^10.47.0",
     "fast-xml-parser": "^5.3.7"
   }
 }
